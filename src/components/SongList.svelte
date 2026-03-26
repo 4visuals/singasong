@@ -53,15 +53,18 @@
       <button class="btn-add" onclick={onAddSong}>+ 곡 추가</button>
     </div>
   </div>
-  <audio src="https://kr.object.ncloudstorage.com/tesis/media/todoFlores_vocals.mp3" controls></audio>
 
   <div class="song-grid">
     {#each songs as song (song.id)}
       <div class="song-card">
-        <div class="song-info" onclick={() => onSelectSong(song)}>
+        <button
+          class="song-info"
+          onclick={() => onSelectSong(song)}
+          type="button"
+        >
           <h2>{song.title}</h2>
           <p>{song.verses.length}개 소절</p>
-        </div>
+        </button>
         <div class="song-actions">
           <button class="btn-edit" onclick={() => handleEdit(song)}>편집</button>
           <button class="btn-delete" onclick={() => handleDelete(song.id)}>삭제</button>
@@ -142,8 +145,12 @@
   }
 
   .song-info {
+    width: 100%;
     padding: 20px;
     cursor: pointer;
+    background: transparent;
+    border: none;
+    text-align: left;
   }
 
   .song-info h2 {

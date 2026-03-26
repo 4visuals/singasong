@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { AudioManager, textToSpeech } from '../lib/audio';
+  import { prepareAudio, textToSpeech } from '../lib/audio';
   import type { Song, Word } from '../types';
     import { SongApi } from '../lib/song-api';
 
@@ -16,7 +16,7 @@
   let currentVerseIndex = $state(0);
   let highlightedWordId = $state<string | null>(null);
   let showCelebration = $state(false);
-  let audioManager: AudioManager | null = null;
+  let audioControl: { play: (options?: { startTime?: number; endTime?: number }) => Promise<void> } | null = null;
   let playedWords = $state<Set<string>>(new Set());
   let playbackRate = $state(1.0);
   let showOriginalVideo = $state(true);
@@ -24,35 +24,15 @@
   onMount(() => {
     // Load vocal audio
     if (song.vocalAudioFile) {
-      audioManager = new AudioManager();
-      audioManager.loadAudio(api.resolveUri(song.vocalAudioFile as string))
-        .then(() => {
+      prepareAudio(api.resolveUri(song.vocalAudioFile as string))
+        .then((control) => {
+          audioControl = control;
           console.log('보컬 음원 로딩 완료');
         })
-        .catch((error) => {
+        .catch((error: unknown) => {
           console.error('보컬 음원 로딩 실패:', error);
-          audioManager = null;
+          audioControl = null;
         });
-    }
-
-    return () => {
-      audioManager?.stop();
-    };
-  });
-
-  $effect(() => {
-    if (currentVerseIndex >= song.verses.length) {
-      showCelebration = true;
-
-      // Play applause sound
-      const applauseAudio = new Audio('https://kr.object.ncloudstorage.com/tesis/media/Applause.mp3');
-      applauseAudio.play().catch(error => {
-        console.error('Failed to play applause:', error);
-      });
-
-      setTimeout(() => {
-        onComplete();
-      }, 3000);
     }
   });
 
@@ -64,71 +44,84 @@
     const isLastWord = currentVerse && currentVerse.words[currentVerse.words.length - 1].id === word.id;
     const isLastVerseLastWord = isLastWord && currentVerseIndex === song.verses.length - 1;
 
-    // If last word of non-last verse, transition to next verse after 0.5 seconds (independent of audio)
-    if (isLastWord && !isLastVerseLastWord) {
-      setTimeout(() => {
+    // Start audio playback
+    const playAudio = async () => {
+      try {
+        // 원본 영상이 보이는 경우: TTS 사용
+        // 배경 영상이 보이는 경우: 보컬 음원 사용
+        if (showOriginalVideo) {
+          // 원본 영상 - TTS 모드
+          console.log('Playing phrase (TTS):', {
+            id: word.id,
+            text: word.text,
+            startTime: word.startTime,
+            endTime: word.endTime
+          });
+          await textToSpeech(word.text);
+        } else if (audioControl) {
+          // 배경 영상 - 보컬 음원 모드
+          // Log phrase information to console
+          console.log('Playing phrase (Vocal):', {
+            id: word.id,
+            text: word.text,
+            startTime: word.startTime,
+            endTime: word.endTime
+          });
+
+          await audioControl.play({ startTime: word.startTime, endTime: word.endTime });
+        } else {
+          // 보컬 음원이 없는 경우 대체 TTS
+          console.log('Playing phrase (TTS fallback):', {
+            id: word.id,
+            text: word.text,
+            startTime: word.startTime,
+            endTime: word.endTime
+          });
+          await textToSpeech(word.text);
+        }
+      } catch (error) {
+        console.error('Audio playback failed:', error);
+      }
+
+      // Clear highlight after audio completes
+      highlightedWordId = null;
+
+      // If last word of last verse, show celebration after audio completes
+      if (isLastVerseLastWord) {
         playedWords = new Set();
-        currentVerseIndex++;
-      }, 500);
-    }
+        showCelebration = true;
 
-    try {
-      if (audioManager?.isLoaded()) {
-        // 다음 소절의 시작 시간까지 재생되도록 endTime 확장
-        const extendedEndTime = getExtendedEndTime(word);
-
-        // Log phrase information to console
-        console.log('Playing phrase:', {
-          id: word.id,
-          text: word.text,
-          startTime: word.startTime,
-          endTime: extendedEndTime
+        // Play applause sound
+        const applauseAudio = new Audio('https://kr.object.ncloudstorage.com/tesis/media/Applause.mp3');
+        applauseAudio.play().catch(error => {
+          console.error('Failed to play applause:', error);
         });
 
-        await audioManager.playSegment(word.startTime, extendedEndTime, playbackRate);
-      } else {
-        console.log('Playing phrase (TTS):', {
-          id: word.id,
-          text: word.text,
-          startTime: word.startTime,
-          endTime: word.endTime
-        });
-        await textToSpeech(word.text);
+        setTimeout(() => {
+          onComplete();
+        }, 3000);
       }
-    } catch (error) {
-      console.error('Audio playback failed:', error);
-    }
+    };
 
-    highlightedWordId = null;
-
-    // If last word of last verse, show celebration after audio completes
+    // For last word of last verse, wait for audio to complete
     if (isLastVerseLastWord) {
-      playedWords = new Set();
-      currentVerseIndex++;
-    } else if (!isLastWord) {
-      // Mark word as played (only if not last word)
-      playedWords.add(word.id);
-      playedWords = new Set(playedWords);
-    }
-  }
+      await playAudio();
+    } else {
+      // For other words, play audio in background
+      playAudio();
 
-  function getExtendedEndTime(word: Word): number {
-    const currentVerse = song.verses[currentVerseIndex];
-    if (!currentVerse) return word.endTime;
-
-    // 현재 어절이 현재 소절의 마지막 어절인지 확인
-    const wordIndex = currentVerse.words.findIndex(w => w.id === word.id);
-    const isLastWord = wordIndex === currentVerse.words.length - 1;
-
-    if (isLastWord) {
-      // 다음 소절이 있으면 다음 소절의 시작 시간까지 재생
-      const nextVerse = song.verses[currentVerseIndex + 1];
-      if (nextVerse) {
-        return nextVerse.startTime;
+      // If last word of non-last verse, transition to next verse after 0.5s
+      if (isLastWord) {
+        setTimeout(() => {
+          playedWords = new Set();
+          currentVerseIndex++;
+        }, 500);
+      } else {
+        // Mark word as played (only if not last word)
+        playedWords.add(word.id);
+        playedWords = new Set(playedWords);
       }
     }
-
-    return word.endTime;
   }
 
   function goToPreviousVerse() {
@@ -162,9 +155,13 @@
   <div class="header">
     <button class="btn-back" onclick={onBack}>← 목록으로</button>
     <h1>{song.title}</h1>
-    <button class="btn-youtube" onclick={toggleVideo}>
-      <span class="youtube-icon">▶</span> {showOriginalVideo ? '반주 보기' : '원본 보기'}
-    </button>
+    {#if song.bgMusicVideoUrl}
+      <button class="btn-youtube" onclick={toggleVideo}>
+        <span class="youtube-icon">▶</span> {showOriginalVideo ? '반주 보기' : '원본 보기'}
+      </button>
+    {:else}
+      <div class="btn-placeholder"></div>
+    {/if}
   </div>
 
   {#if showCelebration}
@@ -305,12 +302,17 @@
     background: #cc0000;
   }
 
+  .btn-placeholder {
+    min-width: 120px;
+  }
+
   .youtube-icon {
     font-size: 20px;
   }
 
   .video-container {
-    margin-bottom: 30px;
+    margin: 0 auto 30px;
+    width: 80%;
     background: #567c8d;
     border-radius: 12px;
     overflow: hidden;
@@ -319,7 +321,7 @@
 
   .video-container iframe {
     width: 100%;
-    height: 400px;
+    height: 320px;
     display: block;
   }
 

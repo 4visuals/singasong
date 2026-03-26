@@ -1,4 +1,4 @@
-import { PitchShifter } from 'soundtouchjs';
+import { SoundTouch, SimpleFilter } from 'soundtouchjs';
 
 export class AudioManager {
   private audioContext: AudioContext;
@@ -100,22 +100,22 @@ export class AudioManager {
         // Process all input samples
         let processed = filter.extract(new Float32Array(segmentLength * 2), segmentLength);
         if (processed && processed[0] && processed[0].length > 0) {
-          outputLeft.push(...Array.from(processed[0]));
+          outputLeft.push(...Array.from(processed[0] as Float32Array));
           if (processed[1]) {
-            outputRight.push(...Array.from(processed[1]));
+            outputRight.push(...Array.from(processed[1] as Float32Array));
           } else {
-            outputRight.push(...Array.from(processed[0]));
+            outputRight.push(...Array.from(processed[0] as Float32Array));
           }
         }
 
         // Flush any remaining samples
         processed = filter.extract(new Float32Array(0), 0);
         if (processed && processed[0] && processed[0].length > 0) {
-          outputLeft.push(...Array.from(processed[0]));
+          outputLeft.push(...Array.from(processed[0] as Float32Array));
           if (processed[1]) {
-            outputRight.push(...Array.from(processed[1]));
+            outputRight.push(...Array.from(processed[1] as Float32Array));
           } else {
-            outputRight.push(...Array.from(processed[0]));
+            outputRight.push(...Array.from(processed[0] as Float32Array));
           }
         }
 
@@ -180,54 +180,78 @@ export async function prepareAudio(
   source: string,
   preload: boolean = true
 ): Promise<{ play: (options?: { startTime?: number; endTime?: number }) => Promise<void> }> {
-  const audio = new Audio();
-  audio.src = source;
+  const templateAudio = new Audio();
+  templateAudio.src = source;
 
   // Preload audio if requested
   if (preload) {
-    audio.preload = 'auto';
+    templateAudio.preload = 'auto';
     await new Promise<void>((resolve, reject) => {
       const onCanPlayThrough = () => {
-        audio.removeEventListener('canplaythrough', onCanPlayThrough);
-        audio.removeEventListener('error', onError);
+        templateAudio.removeEventListener('canplaythrough', onCanPlayThrough);
+        templateAudio.removeEventListener('error', onError);
         resolve();
       };
       const onError = () => {
-        audio.removeEventListener('canplaythrough', onCanPlayThrough);
-        audio.removeEventListener('error', onError);
+        templateAudio.removeEventListener('canplaythrough', onCanPlayThrough);
+        templateAudio.removeEventListener('error', onError);
         reject(new Error('Failed to load audio'));
       };
-      audio.addEventListener('canplaythrough', onCanPlayThrough);
-      audio.addEventListener('error', onError);
-      audio.load();
+      templateAudio.addEventListener('canplaythrough', onCanPlayThrough);
+      templateAudio.addEventListener('error', onError);
+      templateAudio.load();
     });
   }
 
   // Return object with play function
   return {
     play: async (options?: { startTime?: number; endTime?: number }) => {
-      // Set start time if specified
-      if (options?.startTime !== undefined) {
-        audio.currentTime = options.startTime;
-      }
+      return new Promise<void>((resolve) => {
+        // Create a new Audio instance for each play call to allow simultaneous playback
+        const audio = new Audio();
+        audio.src = source;
 
-      await audio.play();
+        // Set start time if specified
+        if (options?.startTime !== undefined) {
+          audio.currentTime = options.startTime;
+        }
 
-      // Handle end time if specified
-      if (options?.endTime !== undefined) {
-        const handleTimeUpdate = () => {
-          if (audio.currentTime >= options.endTime!) {
-            audio.pause();
+        // Handle end time if specified
+        if (options?.endTime !== undefined) {
+          const handleTimeUpdate = () => {
+            if (audio.currentTime >= options.endTime!) {
+              audio.pause();
+            }
+          };
+
+          const cleanup = () => {
             audio.removeEventListener('timeupdate', handleTimeUpdate);
-          }
-        };
-        audio.addEventListener('timeupdate', handleTimeUpdate);
-      }
+            audio.removeEventListener('ended', handleEnded);
+            audio.removeEventListener('pause', handlePause);
+            resolve();
+          };
+
+          const handlePause = cleanup;
+          const handleEnded = cleanup;
+
+          audio.addEventListener('timeupdate', handleTimeUpdate);
+          audio.addEventListener('pause', handlePause);
+          audio.addEventListener('ended', handleEnded);
+        } else {
+          const handleEnded = () => resolve();
+          audio.addEventListener('ended', handleEnded);
+        }
+
+        audio.play();
+      });
     }
   };
 }
 
 export async function textToSpeech(text: string): Promise<void> {
+  // Cancel any ongoing speech
+  speechSynthesis.cancel();
+
   return new Promise((resolve) => {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ko-KR';

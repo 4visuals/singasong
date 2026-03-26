@@ -119,8 +119,9 @@
   <div class="form-section">
     <h2>기본 정보</h2>
     <div class="form-group">
-      <label>노래 제목</label>
+      <label for="song-title">노래 제목</label>
       <input
+        id="song-title"
         type="text"
         bind:value={formData.title}
         placeholder="노래 제목을 입력하세요"
@@ -128,8 +129,9 @@
     </div>
 
     <div class="form-group">
-      <label>원본 동영상 링크</label>
+      <label for="original-video-url">원본 동영상 링크</label>
       <input
+        id="original-video-url"
         type="url"
         bind:value={formData.originalVideoUrl}
         placeholder="https://youtu.be/..."
@@ -137,8 +139,9 @@
     </div>
 
     <div class="form-group">
-      <label>배경음악 동영상 링크</label>
+      <label for="bg-music-video-url">배경음악 동영상 링크</label>
       <input
+        id="bg-music-video-url"
         type="url"
         bind:value={formData.bgMusicVideoUrl}
         placeholder="https://youtu.be/..."
@@ -146,8 +149,9 @@
     </div>
 
     <div class="form-group">
-      <label>보컬 음원 업로드</label>
+      <label for="vocal-audio-file">보컬 음원 업로드</label>
       <input
+        id="vocal-audio-file"
         type="file"
         accept="audio/*"
         onchange={handleVocalAudioUpload}
@@ -175,8 +179,9 @@
 
         <div class="verse-timing">
           <div class="form-group-inline">
-            <label>시작 시간 (초)</label>
+            <label for="verse-start-{verse.id}">시작 시간 (초)</label>
             <input
+              id="verse-start-{verse.id}"
               type="number"
               step="0.1"
               value={verse.startTime}
@@ -184,8 +189,9 @@
             />
           </div>
           <div class="form-group-inline">
-            <label>종료 시간 (초)</label>
+            <label for="verse-end-{verse.id}">종료 시간 (초)</label>
             <input
+              id="verse-end-{verse.id}"
               type="number"
               step="0.1"
               value={verse.endTime}
@@ -205,8 +211,9 @@
               </div>
 
               <div class="form-group">
-                <label>가사</label>
+                <label for="word-text-{word.id}">가사</label>
                 <input
+                  id="word-text-{word.id}"
                   type="text"
                   value={word.text}
                   oninput={(e) => updateWord(verse.id, word.id, 'text', (e.target as HTMLInputElement).value)}
@@ -215,8 +222,9 @@
               </div>
 
               <div class="form-group">
-                <label>이미지 URL</label>
+                <label for="word-image-{word.id}">이미지 URL</label>
                 <input
+                  id="word-image-{word.id}"
                   type="url"
                   value={word.imageUrl}
                   oninput={(e) => updateWord(verse.id, word.id, 'imageUrl', (e.target as HTMLInputElement).value)}
@@ -229,8 +237,9 @@
 
               <div class="word-timing">
                 <div class="form-group-inline">
-                  <label>시작 (초)</label>
+                  <label for="word-start-{word.id}">시작 (초)</label>
                   <input
+                    id="word-start-{word.id}"
                     type="number"
                     step="0.1"
                     value={word.startTime}
@@ -238,8 +247,9 @@
                   />
                 </div>
                 <div class="form-group-inline">
-                  <label>종료 (초)</label>
+                  <label for="word-end-{word.id}">종료 (초)</label>
                   <input
+                    id="word-end-{word.id}"
                     type="number"
                     step="0.1"
                     value={word.endTime}
@@ -355,8 +365,16 @@
   }
 
   .form-group input[type="text"],
-  .form-group input[type="url"],
-  .form-group input[type="number"] {
+  .form-group input[type="url"] {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    transition: border-color 0.2s;
+  }
+
+  .form-group-inline input[type="number"] {
     width: 100%;
     padding: 12px;
     font-size: 16px;
@@ -377,12 +395,6 @@
   .file-info {
     margin-top: 8px;
     color: #4CAF50;
-    font-size: 14px;
-  }
-
-  .help-text {
-    margin-top: 4px;
-    color: #999;
     font-size: 14px;
   }
 
