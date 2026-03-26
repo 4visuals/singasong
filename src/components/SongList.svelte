@@ -1,36 +1,37 @@
 <script lang="ts">
-  import { getSongs, deleteSong, isSeedSong } from '../lib/storage';
-  import type { Song } from '../types';
+  import { getSongs, deleteSong, isSeedSong } from "../lib/storage";
+  import type { Song } from "../types";
 
   interface Props {
     onSelectSong: (song: Song) => void;
+    onImportSong: () => void;
     onAddSong: () => void;
     onEditSong: (song: Song) => void;
   }
 
-  let { onSelectSong, onAddSong, onEditSong }: Props = $props();
+  let { onSelectSong, onImportSong, onAddSong, onEditSong }: Props = $props();
 
   let songs = $state<Song[]>(getSongs());
 
   function handleDelete(id: string) {
     if (isSeedSong(id)) {
-      alert('기본 제공 노래는 삭제할 수 없습니다.');
+      alert("기본 제공 노래는 삭제할 수 없습니다.");
       return;
     }
 
-    if (confirm('이 노래를 삭제하시겠습니까?')) {
+    if (confirm("이 노래를 삭제하시겠습니까?")) {
       try {
         deleteSong(id);
         songs = getSongs();
       } catch (error) {
-        alert(error instanceof Error ? error.message : '삭제 실패');
+        alert(error instanceof Error ? error.message : "삭제 실패");
       }
     }
   }
 
   function handleEdit(song: Song) {
     if (isSeedSong(song.id)) {
-      alert('기본 제공 노래는 편집할 수 없습니다.');
+      alert("기본 제공 노래는 편집할 수 없습니다.");
       return;
     }
     onEditSong(song);
@@ -50,6 +51,7 @@
   <div class="header">
     <h1>노래 목록</h1>
     <div class="buttons">
+      <button class="btn-import" onclick={onImportSong}>불러오기</button>
       <button class="btn-add" onclick={onAddSong}>+ 곡 추가</button>
     </div>
   </div>
@@ -66,8 +68,11 @@
           <p>{song.verses.length}개 소절</p>
         </button>
         <div class="song-actions">
-          <button class="btn-edit" onclick={() => handleEdit(song)}>편집</button>
-          <button class="btn-delete" onclick={() => handleDelete(song.id)}>삭제</button>
+          <button class="btn-edit" onclick={() => handleEdit(song)}>편집</button
+          >
+          <button class="btn-delete" onclick={() => handleDelete(song.id)}
+            >삭제</button
+          >
         </div>
       </div>
     {/each}
@@ -75,7 +80,7 @@
     {#if songs.length === 0}
       <div class="empty-state">
         <p>노래가 없습니다.</p>
-        <p>+ 곡 추가 버튼을 눌러 노래를 추가하세요.</p>
+        <p>불러오기 또는 + 곡 추가 버튼을 눌러 노래를 준비하세요.</p>
       </div>
     {/if}
   </div>
@@ -114,11 +119,27 @@
     font-size: 18px;
     font-weight: bold;
     color: white;
-    background: #4CAF50;
+    background: #4caf50;
     border: none;
     border-radius: 8px;
     cursor: pointer;
     transition: background 0.2s;
+  }
+
+  .btn-import {
+    padding: 12px 24px;
+    font-size: 18px;
+    font-weight: bold;
+    color: #1d4ed8;
+    background: #dbeafe;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-import:hover {
+    background: #bfdbfe;
   }
 
   .btn-add:hover {
@@ -136,7 +157,9 @@
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     overflow: hidden;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition:
+      transform 0.2s,
+      box-shadow 0.2s;
   }
 
   .song-card:hover {
@@ -181,7 +204,7 @@
   }
 
   .btn-edit {
-    color: #2196F3;
+    color: #2196f3;
     border-right: 1px solid #eee;
   }
 
