@@ -76,14 +76,26 @@
     >
       <div class="modal-header">
         <h2>{$modalContext.title}</h2>
-        <button
-          class="modal-close-button"
-          onclick={modalContext.closeModal}
-          type="button"
-          aria-label="닫기"
-        >
-          닫기
-        </button>
+        <div class="modal-header-actions">
+          {#if typeof $modalContext.props.onRefresh === 'function'}
+            <button
+              class="modal-refresh-button"
+              onclick={() => ($modalContext.props.onRefresh as () => void)()}
+              disabled={!!$modalContext.props.onRefreshLoading}
+              type="button"
+            >
+              {$modalContext.props.onRefreshLoading ? "불러오는 중..." : "새로고침"}
+            </button>
+          {/if}
+          <button
+            class="modal-close-button"
+            onclick={modalContext.closeModal}
+            type="button"
+            aria-label="닫기"
+          >
+            닫기
+          </button>
+        </div>
       </div>
 
       <div class="modal-body">
@@ -131,6 +143,27 @@
     gap: 16px;
     padding: 18px 20px;
     border-bottom: 1px solid #e5e7eb;
+  }
+
+  .modal-header-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .modal-refresh-button {
+    border: 0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font: inherit;
+    font-weight: 600;
+    color: #1d4ed8;
+    background: #dbeafe;
+    cursor: pointer;
+  }
+
+  .modal-refresh-button:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
   .modal-header h2 {

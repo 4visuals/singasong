@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import ReadingTreeNode from "./ReadingTreeNode.svelte";
   import { restApi } from "../lib/api";
   import { songApi } from "../lib/song-api";
@@ -12,12 +13,14 @@
     initialTree: ReadingTreeFolderNode | null;
     closeModal?: () => void;
     onSelectBook?: (selectedBook: SelectedReadingBook) => void;
+    modalContext?: { updateModalProps: (props: Record<string, unknown>) => void };
   }
 
   let {
     initialTree,
     closeModal = () => {},
     onSelectBook = () => {},
+    modalContext,
   }: Props = $props();
 
   let readingTree = $state<ReadingTreeFolderNode | null>(null);
@@ -42,12 +45,27 @@
     });
   }
 
+  function findFolderByName(
+    node: ReadingTreeFolderNode,
+    name: string,
+  ): ReadingTreeFolderNode | null {
+    if (node.name === name) return node;
+    for (const child of node.children) {
+      if (child.kind === "folder") {
+        const found = findFolderByName(child, name);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
   function applyTree(tree: ReadingTreeFolderNode | null) {
-    readingTree = tree;
+    const target = tree ? (findFolderByName(tree, "노래") ?? tree) : null;
+    readingTree = target;
 
     const nextExpandedFolders = new Set<number>();
-    if (tree) {
-      collectExpandedFolders(tree, nextExpandedFolders);
+    if (target) {
+      collectExpandedFolders(target, nextExpandedFolders);
     }
     expandedFolders = nextExpandedFolders;
   }
@@ -119,25 +137,19 @@
   $effect(() => {
     applyTree(initialTree);
   });
+
+  $effect(() => {
+    const loading = readingTreeLoading;
+    untrack(() => {
+      modalContext?.updateModalProps({
+        onRefresh: refreshTree,
+        onRefreshLoading: loading,
+      });
+    });
+  });
 </script>
 
 <div class="book-tree-view">
-  <div class="toolbar">
-    <p>백엔드 `cate/R` 응답을 트리 구조로 렌더링합니다.</p>
-    <div class="toolbar-buttons">
-      <button
-        class="refresh-button"
-        onclick={refreshTree}
-        disabled={readingTreeLoading}
-      >
-        {readingTreeLoading ? "불러오는 중..." : "새로고침"}
-      </button>
-      <button class="close-button" onclick={closeModal} type="button"
-        >닫기</button
-      >
-    </div>
-  </div>
-
   {#if selectedBookSeq && selectedBookName}
     <p class="selection-summary">
       선택한 책: {selectedBookName}
@@ -176,50 +188,6 @@
     gap: 16px;
   }
 
-  .toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-  }
-
-  .toolbar p {
-    margin: 0;
-    color: #6b7280;
-    font-size: 14px;
-  }
-
-  .toolbar-buttons {
-    display: flex;
-    gap: 10px;
-  }
-
-  .refresh-button,
-  .close-button {
-    border: 0;
-    border-radius: 10px;
-    padding: 10px 14px;
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .refresh-button {
-    color: #1d4ed8;
-    background: #dbeafe;
-  }
-
-  .close-button {
-    color: #374151;
-    background: #f3f4f6;
-  }
-
-  .refresh-button:disabled,
-  .close-button:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-
   .tree-card {
     display: flex;
     flex-direction: column;
@@ -245,14 +213,4 @@
     font-size: 14px;
   }
 
-  @media (max-width: 640px) {
-    .toolbar {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    .toolbar-buttons {
-      justify-content: flex-end;
-    }
-  }
 </style>

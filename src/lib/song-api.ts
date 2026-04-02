@@ -69,8 +69,6 @@ export class ReadingBookSong implements Song {
       words: paragraph.symbols.map((symbol) =>
         this.toWord(symbol, paragraph.seq),
       ),
-      startTime: null,
-      endTime: null,
     }));
   }
 
@@ -82,8 +80,6 @@ export class ReadingBookSong implements Song {
       id: `reading-word-${paragraphSeq}-${symbol.symbolSeq}`,
       text: symbol.token.originWord,
       imageUrl: this.resolvePictureUrl(symbol.pic),
-      startTime: null,
-      endTime: null,
     };
   }
 

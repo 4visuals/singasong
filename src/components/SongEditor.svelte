@@ -37,8 +37,6 @@
       {
         id: crypto.randomUUID(),
         words: [],
-        startTime: 0,
-        endTime: 0,
       },
     ];
   }

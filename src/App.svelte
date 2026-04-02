@@ -28,11 +28,6 @@
     currentScreen = "play";
   }
 
-  function handleAddSong() {
-    editingSong = null;
-    currentScreen = "edit";
-  }
-
   function handleEditSong(song: Song) {
     editingSong = song;
     currentScreen = "edit";
@@ -128,8 +123,7 @@
     <SongList
       onSelectSong={handleSelectSong}
       onImportSong={handleLoadReadingTree}
-      onAddSong={handleAddSong}
-      onEditSong={handleEditSong}
+onEditSong={handleEditSong}
     />
   {:else if currentScreen === "play" && selectedSong}
     <SongPlayer

@@ -5,11 +5,10 @@
   interface Props {
     onSelectSong: (song: Song) => void;
     onImportSong: () => void;
-    onAddSong: () => void;
     onEditSong: (song: Song) => void;
   }
 
-  let { onSelectSong, onImportSong, onAddSong, onEditSong }: Props = $props();
+  let { onSelectSong, onImportSong, onEditSong }: Props = $props();
 
   let songs = $state<Song[]>(getSongs());
 
@@ -52,7 +51,6 @@
     <h1>노래 목록</h1>
     <div class="buttons">
       <button class="btn-import" onclick={onImportSong}>불러오기</button>
-      <button class="btn-add" onclick={onAddSong}>+ 곡 추가</button>
     </div>
   </div>
 
@@ -80,7 +78,7 @@
     {#if songs.length === 0}
       <div class="empty-state">
         <p>노래가 없습니다.</p>
-        <p>불러오기 또는 + 곡 추가 버튼을 눌러 노래를 준비하세요.</p>
+        <p>불러오기 버튼을 눌러 노래를 준비하세요.</p>
       </div>
     {/if}
   </div>
@@ -114,18 +112,6 @@
     gap: 10px;
   }
 
-  .btn-add {
-    padding: 12px 24px;
-    font-size: 18px;
-    font-weight: bold;
-    color: white;
-    background: #4caf50;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-
   .btn-import {
     padding: 12px 24px;
     font-size: 18px;
@@ -140,10 +126,6 @@
 
   .btn-import:hover {
     background: #bfdbfe;
-  }
-
-  .btn-add:hover {
-    background: #45a049;
   }
 
   .song-grid {

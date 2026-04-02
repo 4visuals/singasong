@@ -54,8 +54,6 @@
           console.log('Playing phrase (TTS):', {
             id: word.id,
             text: word.text,
-            startTime: word.startTime,
-            endTime: word.endTime
           });
           await textToSpeech(word.text);
         } else if (audioControl) {
@@ -64,18 +62,14 @@
           console.log('Playing phrase (Vocal):', {
             id: word.id,
             text: word.text,
-            startTime: word.startTime,
-            endTime: word.endTime
           });
 
-          await audioControl.play({ startTime: word.startTime, endTime: word.endTime });
+          await audioControl.play();
         } else {
           // 보컬 음원이 없는 경우 대체 TTS
           console.log('Playing phrase (TTS fallback):', {
             id: word.id,
             text: word.text,
-            startTime: word.startTime,
-            endTime: word.endTime
           });
           await textToSpeech(word.text);
         }
@@ -190,6 +184,12 @@
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowfullscreen
         ></iframe>
+      {:else}
+        <img
+          class="video-placeholder"
+          src="https://i.namu.wiki/i/CdZI-GqXQ0F6l8eYp8kVxCuXauV15KcsXUlLBLGaVmgaxCDRhZnb9kvhlIaIqOn_bJeOfm5Kp9kcpSafaZYzADkp7rvah5ypc0OUGQ1jJb-hJUh3NolXYEJfUhJ8ExzNQzCAcqG07hyaXM3gw-R1Eg.svg"
+          alt="노래"
+        />
       {/if}
     </div>
 
@@ -323,6 +323,13 @@
     width: 100%;
     height: 320px;
     display: block;
+  }
+
+  .video-placeholder {
+    width: 100%;
+    height: 320px;
+    display: block;
+    object-fit: contain;
   }
 
   .lyrics-container {
