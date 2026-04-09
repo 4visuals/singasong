@@ -13,12 +13,14 @@ const DEFAULT_SYMBOL_PATH =
 type ReadingBookSongOptions = {
   bookName?: string;
   bookSeq?: number;
+  originalVideoUrl?: string | null;
 };
 
-export class ReadingBookSong implements Song {
+export class ReadingBookSong {
   private readonly sortedParas: ReadingParagraph[];
   private readonly bookName: string;
   private readonly bookSeq: number | null;
+  private readonly sourceVideoUrl: string;
 
   constructor(paras: ReadingParagraph[], options: ReadingBookSongOptions = {}) {
     this.sortedParas = [...paras].sort((left, right) => {
@@ -34,6 +36,7 @@ export class ReadingBookSong implements Song {
         ?.sentence ??
       "제목없음";
     this.bookSeq = options.bookSeq ?? null;
+    this.sourceVideoUrl = options.originalVideoUrl?.trim() || "";
   }
 
   get id(): string {
@@ -52,7 +55,7 @@ export class ReadingBookSong implements Song {
   }
 
   get originalVideoUrl(): string {
-    return "";
+    return this.sourceVideoUrl;
   }
 
   get bgMusicVideoUrl(): string | null {
@@ -105,7 +108,31 @@ export class SongApi {
     return new ReadingBookSong(detail.paras, {
       bookName: options.bookName ?? detail.bookName,
       bookSeq: options.bookSeq,
+      originalVideoUrl: options.originalVideoUrl,
     });
+  }
+
+  createSingingDraft(
+    detail: ReadingBookDetailResponse,
+    options: ReadingBookSongOptions = {},
+  ): Song {
+    const numOfCols = detail.paras.reduce((max, paragraph) => {
+      return Math.max(max, paragraph.symbols.length);
+    }, 0);
+
+    return {
+      singSeq: null,
+      singTitle: (options.bookName ?? detail.bookName).trim(),
+      numOfCols: numOfCols > 0 ? numOfCols : null,
+      singSkipLines: 0,
+      singUrl: options.originalVideoUrl?.trim() || null,
+      singOrigin: options.originalVideoUrl?.trim() ? "YTB" : null,
+      singCreated: null,
+      singOwnerRef: null,
+      teacherRef: null,
+      bookRef: options.bookSeq ?? null,
+      thumbnail: null,
+    };
   }
 }
 

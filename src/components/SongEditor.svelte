@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { restApi } from "../lib/api";
   import Symbol from "./Symbol.svelte";
-  import { saveSong } from "../lib/storage";
-  import type { Song } from "../types";
+  import type { ReadingPicture, Song } from "../types";
+
+  const DEFAULT_SYMBOL_PATH =
+    "https://kr.object.ncloudstorage.com/aacweb/symbols/after";
 
   interface Props {
     song: Song | null;
@@ -10,18 +13,26 @@
   }
 
   let { song, onSave, onCancel }: Props = $props();
+  let savePending = $state(false);
+  let isEditing = $derived(song?.singSeq != null);
+  let thumbnailOptions = $state<ReadingPicture[]>([]);
+  let thumbnailsLoading = $state(false);
+  let thumbnailsError = $state("");
+  let thumbnailOptionsBookRef = $state<number | null | undefined>(undefined);
 
   function createFormData(source: Song | null): Song {
     return {
-      id: source?.id || crypto.randomUUID(),
-      title: source?.title || "",
-      originalVideoUrl: source?.originalVideoUrl || "",
-      bgMusicVideoUrl: source?.bgMusicVideoUrl || "",
-      vocalAudioFile: source?.vocalAudioFile || undefined,
-      verses: (source?.verses || []).map((verse) => ({
-        ...verse,
-        words: verse.words.map((word) => ({ ...word })),
-      })),
+      singSeq: source?.singSeq ?? null,
+      singTitle: source?.singTitle ?? "",
+      numOfCols: source?.numOfCols ?? 4,
+      singSkipLines: source?.singSkipLines ?? 0,
+      singUrl: source?.singUrl ?? "",
+      singOrigin: source?.singOrigin ?? null,
+      singCreated: source?.singCreated ?? null,
+      singOwnerRef: source?.singOwnerRef ?? null,
+      teacherRef: source?.teacherRef ?? null,
+      bookRef: source?.bookRef ?? null,
+      thumbnail: source?.thumbnail ?? null,
     };
   }
 
@@ -31,28 +42,124 @@
     formData = createFormData(song);
   });
 
-  function addVerse() {
-    formData.verses = [
-      ...formData.verses,
-      {
-        id: crypto.randomUUID(),
-        words: [],
-      },
-    ];
+  function resolvePictureUrl(picture: ReadingPicture): string {
+    const symbolPath = (
+      import.meta.env.VITE_SYMBOL_PATH || DEFAULT_SYMBOL_PATH
+    ).replace(/\/+$/, "");
+    const origin = picture.origin || "common";
+    return `${symbolPath}/${origin}/${picture.genName}`;
   }
 
-  function removeVerse(verseId: string) {
-    formData.verses = formData.verses.filter((v) => v.id !== verseId);
+  function collectThumbnailOptions(
+    bookDetail: Awaited<ReturnType<typeof restApi.getReadingBookDetail>>,
+  ): ReadingPicture[] {
+    const seen = new Set<string>();
+
+    return bookDetail.paras.flatMap((paragraph) =>
+      paragraph.symbols
+        .map((symbol) => symbol.pic)
+        .filter((picture) => {
+          const key = `${picture.picSeq}-${picture.genName}`;
+
+          if (seen.has(key)) {
+            return false;
+          }
+
+          seen.add(key);
+          return true;
+        }),
+    );
   }
 
-  function handleSave() {
-    if (!formData.title.trim()) {
+  async function loadThumbnailOptions(bookRef: number | null) {
+    if (bookRef == null) {
+      thumbnailOptions = [];
+      thumbnailsError = "";
+      thumbnailsLoading = false;
+      thumbnailOptionsBookRef = null;
+      return;
+    }
+
+    thumbnailsLoading = true;
+    thumbnailsError = "";
+    thumbnailOptionsBookRef = bookRef;
+
+    try {
+      const detail = await restApi.getReadingBookDetail(bookRef);
+      thumbnailOptions = collectThumbnailOptions(detail);
+    } catch (error) {
+      thumbnailOptions = [];
+      thumbnailsError =
+        error instanceof Error
+          ? error.message
+          : "썸네일 목록을 불러오지 못했습니다.";
+    } finally {
+      thumbnailsLoading = false;
+    }
+  }
+
+  $effect(() => {
+    if (thumbnailOptionsBookRef === formData.bookRef) {
+      return;
+    }
+
+    void loadThumbnailOptions(formData.bookRef);
+  });
+
+  function handleSelectThumbnail(
+    event: MouseEvent,
+    picture: ReadingPicture | null,
+  ) {
+    event.preventDefault();
+
+    formData = {
+      ...formData,
+      thumbnail: picture,
+    };
+  }
+
+  function isSelectedThumbnail(picture: ReadingPicture): boolean {
+    const current = formData.thumbnail;
+
+    return Boolean(
+      current &&
+        current.picSeq === picture.picSeq &&
+        current.genName === picture.genName,
+    );
+  }
+
+  async function handleSave() {
+    if (!formData.singTitle?.trim()) {
       alert("노래 제목을 입력하세요.");
       return;
     }
 
-    saveSong(formData);
-    onSave();
+    if ((formData.numOfCols ?? 0) <= 0) {
+      alert("컬럼 수는 1 이상의 값이어야 합니다.");
+      return;
+    }
+
+    savePending = true;
+
+    try {
+      if (isEditing) {
+        await restApi.updateSingingSong(formData);
+      } else {
+        await restApi.createSingingSong(formData);
+      }
+
+      onSave();
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : isEditing
+            ? "노래 수정 요청에 실패했습니다."
+            : "노래 저장 요청에 실패했습니다.",
+      );
+    } finally {
+      savePending = false;
+    }
   }
 </script>
 
@@ -60,8 +167,20 @@
   <div class="header">
     <h1>{song ? "노래 편집" : "노래 추가"}</h1>
     <div class="header-actions">
-      <button class="btn-cancel" onclick={onCancel}>취소</button>
-      <button class="btn-save" onclick={handleSave}>저장</button>
+      <button class="btn-cancel" onclick={onCancel} disabled={savePending}>
+        취소
+      </button>
+      <button
+        class="btn-save"
+        onclick={() => void handleSave()}
+        disabled={savePending}
+      >
+        {#if savePending}
+          {isEditing ? "수정 중..." : "저장 중..."}
+        {:else}
+          {isEditing ? "수정" : "저장"}
+        {/if}
+      </button>
     </div>
   </div>
 
@@ -72,7 +191,7 @@
       <input
         id="song-title"
         type="text"
-        bind:value={formData.title}
+        bind:value={formData.singTitle}
         placeholder="노래 제목을 입력하세요"
       />
     </div>
@@ -82,33 +201,83 @@
       <input
         id="original-video-url"
         type="url"
-        bind:value={formData.originalVideoUrl}
+        bind:value={formData.singUrl}
         placeholder="https://youtu.be/..."
       />
     </div>
-  </div>
 
-  <div class="form-section">
-    <div class="section-header">
-      <h2>노래 가사</h2>
-      <button class="btn-add-verse" onclick={addVerse}>+ 소절 추가</button>
+    <div class="form-group">
+      <label for="song-cols">컬럼 수</label>
+      <input
+        id="song-cols"
+        type="number"
+        min="1"
+        step="1"
+        bind:value={formData.numOfCols}
+      />
     </div>
 
-    {#each formData.verses as verse, verseIndex (verse.id)}
-      <div class="verse-panel">
-        <div class="words-section">
-          {#each verse.words as word, wordIndex (word.id)}
-            <Symbol imageUrl={word.imageUrl} text={word.text} />
+    <div class="form-group">
+      <p class="section-label">썸네일 선택</p>
+
+      {#if thumbnailsLoading}
+        <p class="thumbnail-message">썸네일 목록을 불러오는 중입니다.</p>
+      {:else if thumbnailsError}
+        <p class="thumbnail-message error">{thumbnailsError}</p>
+      {:else if formData.bookRef === null}
+        <p class="thumbnail-message">
+          연결된 읽기책이 있어야 썸네일을 선택할 수 있습니다.
+        </p>
+      {:else if thumbnailOptions.length === 0}
+        <p class="thumbnail-message">선택할 수 있는 그림이 없습니다.</p>
+      {:else}
+        <div class="thumbnail-actions">
+          <button
+            class:selected={!formData.thumbnail}
+            class="thumbnail-clear"
+            type="button"
+            onclick={(event) => handleSelectThumbnail(event, null)}
+          >
+            썸네일 없음
+          </button>
+        </div>
+        <div class="thumbnail-grid">
+          {#each thumbnailOptions as picture (`${picture.picSeq}-${picture.genName}`)}
+            <button
+              type="button"
+              class:selected={isSelectedThumbnail(picture)}
+              class="thumbnail-option"
+              onclick={(event) => handleSelectThumbnail(event, picture)}
+            >
+              <Symbol
+                imageUrl={resolvePictureUrl(picture)}
+                text={picture.wordName || picture.picName}
+                width={40}
+                descSize="1rem"
+              />
+            </button>
           {/each}
         </div>
+      {/if}
+    </div>
+
+    {#if formData.bookRef !== null}
+      <div class="form-group">
+        <label for="book-ref">연결된 읽기책</label>
+        <input
+          id="book-ref"
+          type="text"
+          value={`책 #${formData.bookRef}`}
+          disabled
+        />
       </div>
-    {/each}
+    {/if}
   </div>
 </div>
 
 <style>
   .editor-container {
-    max-width: 1200px;
+    max-width: 600px;
     margin: 0 auto;
     padding-bottom: 40px;
   }
@@ -181,13 +350,6 @@
     margin-bottom: 20px;
   }
 
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-  }
-
   .form-group {
     margin-bottom: 20px;
   }
@@ -199,8 +361,16 @@
     color: #555;
   }
 
+  .section-label {
+    display: block;
+    margin: 0 0 8px 0;
+    font-weight: bold;
+    color: #555;
+  }
+
   .form-group input[type="text"],
-  .form-group input[type="url"] {
+  .form-group input[type="url"],
+  .form-group input[type="number"] {
     width: 100%;
     padding: 12px;
     font-size: 16px;
@@ -214,34 +384,64 @@
     border-color: #2196f3;
   }
 
-  .btn-add-verse {
-    padding: 10px 20px;
-    font-size: 16px;
-    font-weight: bold;
-    color: white;
-    background: #2196f3;
-    border: none;
-    border-radius: 8px;
+  .form-group input:disabled {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .thumbnail-message {
+    margin: 0;
+    color: #6b7280;
+  }
+
+  .thumbnail-message.error {
+    color: #dc2626;
+  }
+
+  .thumbnail-actions {
+    margin-bottom: 12px;
+  }
+
+  .thumbnail-clear {
+    padding: 10px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background: #fff;
     cursor: pointer;
-    transition: background 0.2s;
+    font: inherit;
   }
 
-  .btn-add-verse:hover {
-    background: #1976d2;
+  .thumbnail-clear.selected {
+    border-color: #2563eb;
+    background: #dbeafe;
+    color: #1d4ed8;
   }
 
-  .verse-panel {
-    background: #f9f9f9;
-    padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 20px;
-    border: 2px solid #e0e0e0;
-  }
-
-  .words-section {
-    margin-top: 20px;
+  .thumbnail-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 0px;
+  }
+
+  .thumbnail-option {
+    flex: 0 0 auto;
+    padding: 0px;
+    border: 0px solid #e5e7eb;
+    border-radius: 14px;
+    background: #fff;
+    cursor: pointer;
+    transition:
+      border-color 0.2s,
+      background 0.2s,
+      transform 0.2s;
+  }
+
+  .thumbnail-option:hover {
+    transform: translateY(-2px);
+  }
+
+  .thumbnail-option.selected {
+    border-color: #2563eb;
+    background: #eff6ff;
   }
 </style>

@@ -111,7 +111,7 @@
         throw new Error("책 내용을 불러오지 못했습니다.");
       }
 
-      const song = songApi.createReadingBookSong(detail, {
+      const song = songApi.createSingingDraft(detail, {
         bookName: detail.bookName,
         bookSeq: node.seq,
       });

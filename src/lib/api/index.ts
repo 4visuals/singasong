@@ -3,12 +3,14 @@
 // In production leave it empty to use relative requests.
 
 import type {
+  LoginSession,
   ReadingBookResource,
   ReadingBookDetailResponse,
   ReadingCategory,
   ReadingCategoryResponse,
   ReadingTreeBookNode,
   ReadingTreeFolderNode,
+  Song,
 } from "../../types";
 
 type Json = any;
@@ -18,11 +20,14 @@ export type LoginPayload = {
   userPassword: string;
 };
 
-export type LoginResponse = {
-  oauthProfile: unknown | null;
-  success: boolean;
-  roles: string[];
-  userName: string;
+export type LoginResponse = LoginSession;
+
+export type SingingResponse = Partial<Song>;
+export type SingingMapResponse = {
+  common: SingingResponse[];
+  owner: SingingResponse[];
+  student?: SingingResponse[];
+  teacher?: SingingResponse[];
 };
 
 function buildReadingCategoryTree(
@@ -87,6 +92,22 @@ function buildReadingCategoryTree(
   }
 
   return buildFolderNode(rootCategory);
+}
+
+function normalizeSong(resource: SingingResponse): Song {
+  return {
+    singSeq: resource.singSeq ?? null,
+    singTitle: resource.singTitle ?? null,
+    numOfCols: resource.numOfCols ?? null,
+    singSkipLines: resource.singSkipLines ?? null,
+    singUrl: resource.singUrl ?? null,
+    singOrigin: resource.singOrigin ?? null,
+    singCreated: resource.singCreated ?? null,
+    singOwnerRef: resource.singOwnerRef ?? null,
+    teacherRef: resource.teacherRef ?? null,
+    bookRef: resource.bookRef ?? null,
+    thumbnail: resource.thumbnail ?? null,
+  };
 }
 
 export class RestApi {
@@ -209,6 +230,69 @@ export class RestApi {
         method: "GET",
       },
     );
+  }
+
+  async getSingingSongs(): Promise<{
+    common: Song[];
+    owner: Song[];
+    student: Song[];
+    teacher: Song[];
+  }> {
+    const response = await this.request<SingingMapResponse>("/singing", {
+      method: "GET",
+    });
+
+    return {
+      common: (response.common ?? []).map(normalizeSong),
+      owner: (response.owner ?? []).map(normalizeSong),
+      student: (response.student ?? []).map(normalizeSong),
+      teacher: (response.teacher ?? []).map(normalizeSong),
+    };
+  }
+
+  async deleteSingingSong(singSeq: number): Promise<void> {
+    await this.request(`/singing/${singSeq}`, {
+      method: "DELETE",
+    });
+  }
+
+  async createSingingSong(song: Song): Promise<Song> {
+    const created = await this.request<SingingResponse>("/singing", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({
+        singTitle: song.singTitle?.trim() || "",
+        numOfCols: song.numOfCols,
+        singSkipLines: song.singSkipLines ?? 0,
+        singUrl: song.singUrl?.trim() || null,
+        singOrigin: song.singOrigin,
+        bookRef: song.bookRef,
+        thumbnail: song.thumbnail,
+      }),
+    });
+
+    return normalizeSong(created);
+  }
+
+  async updateSingingSong(song: Song): Promise<void> {
+    if (song.singSeq == null) {
+      throw new Error("수정할 노래 식별자가 없습니다.");
+    }
+
+    await this.request(`/singing/${song.singSeq}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({
+        singTitle: song.singTitle?.trim() || "",
+        numOfCols: song.numOfCols ?? 4,
+        singUrl: song.singUrl?.trim() || null,
+        thumbnailRef: song.thumbnail?.picSeq ?? null,
+      }),
+    });
   }
 }
 

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { prepareAudio, textToSpeech } from '../lib/audio';
-  import type { Song, Word } from '../types';
-    import { SongApi } from '../lib/song-api';
+  import { prepareAudio, textToSpeech } from "../lib/audio";
+  import { restApi } from "../lib/api";
+  import { songApi, type ReadingBookSong } from "../lib/song-api";
+  import type { Song, Word } from "../types";
 
   interface Props {
     song: Song;
@@ -10,112 +10,171 @@
     onComplete: () => void;
   }
 
-  const api = new SongApi()
   let { song, onBack, onComplete }: Props = $props();
 
+  let loadedSong = $state<ReadingBookSong | null>(null);
+  let songLoading = $state(true);
+  let songError = $state("");
   let currentVerseIndex = $state(0);
   let highlightedWordId = $state<string | null>(null);
   let showCelebration = $state(false);
-  let audioControl: { play: (options?: { startTime?: number; endTime?: number }) => Promise<void> } | null = null;
+  let audioControl: {
+    play: (options?: { startTime?: number; endTime?: number }) => Promise<void>;
+  } | null = null;
   let playedWords = $state<Set<string>>(new Set());
   let playbackRate = $state(1.0);
   let showOriginalVideo = $state(true);
 
-  onMount(() => {
-    // Load vocal audio
-    if (song.vocalAudioFile) {
-      prepareAudio(api.resolveUri(song.vocalAudioFile as string))
-        .then((control) => {
-          audioControl = control;
-          console.log('보컬 음원 로딩 완료');
-        })
-        .catch((error: unknown) => {
-          console.error('보컬 음원 로딩 실패:', error);
-          audioControl = null;
-        });
+  async function loadReadingBookSong() {
+    currentVerseIndex = 0;
+    highlightedWordId = null;
+    showCelebration = false;
+    playedWords = new Set();
+    showOriginalVideo = true;
+    audioControl = null;
+
+    if (song.bookRef == null) {
+      loadedSong = null;
+      songError = "이 노래에 연결된 읽기책이 없습니다.";
+      songLoading = false;
+      return;
     }
+
+    songLoading = true;
+    songError = "";
+
+    try {
+      const detail = await restApi.getReadingBookDetail(song.bookRef);
+
+      if (!detail.success) {
+        throw new Error("노래 내용을 불러오지 못했습니다.");
+      }
+
+      loadedSong = songApi.createReadingBookSong(detail, {
+        bookName: song.singTitle ?? detail.bookName,
+        bookSeq: song.bookRef,
+        originalVideoUrl: song.singUrl,
+      });
+    } catch (error) {
+      loadedSong = null;
+      songError =
+        error instanceof Error
+          ? error.message
+          : "노래 내용을 불러오지 못했습니다.";
+    } finally {
+      songLoading = false;
+    }
+  }
+
+  $effect(() => {
+    void loadReadingBookSong();
   });
 
+  $effect(() => {
+    const activeSong = loadedSong;
+
+    audioControl = null;
+
+    if (!activeSong?.vocalAudioFile || typeof activeSong.vocalAudioFile !== "string") {
+      return;
+    }
+
+    let cancelled = false;
+
+    prepareAudio(songApi.resolveUri(activeSong.vocalAudioFile))
+      .then((control) => {
+        if (!cancelled) {
+          audioControl = control;
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          console.error("보컬 음원 로딩 실패:", error);
+          audioControl = null;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  function finishPlayback(isLastVerseLastWord: boolean) {
+    highlightedWordId = null;
+
+    if (!isLastVerseLastWord) {
+      return;
+    }
+
+    playedWords = new Set();
+    showCelebration = true;
+
+    const applauseAudio = new Audio(
+      "https://kr.object.ncloudstorage.com/tesis/media/Applause.mp3",
+    );
+
+    applauseAudio.play().catch((error) => {
+      console.error("Failed to play applause:", error);
+    });
+
+    setTimeout(() => {
+      onComplete();
+    }, 3000);
+  }
+
   async function handleWordClick(word: Word) {
+    const activeSong = loadedSong;
+
+    if (!activeSong) {
+      return;
+    }
+
+    const activeVerse = activeSong.verses[currentVerseIndex];
+
+    if (!activeVerse) {
+      return;
+    }
+
     highlightedWordId = word.id;
 
-    // Check if this is the last word in the current verse
-    const currentVerse = song.verses[currentVerseIndex];
-    const isLastWord = currentVerse && currentVerse.words[currentVerse.words.length - 1].id === word.id;
-    const isLastVerseLastWord = isLastWord && currentVerseIndex === song.verses.length - 1;
+    const lastWord = activeVerse.words[activeVerse.words.length - 1];
+    const isLastWord = lastWord?.id === word.id;
+    const isLastVerseLastWord =
+      isLastWord && currentVerseIndex === activeSong.verses.length - 1;
 
-    // Start audio playback
     const playAudio = async () => {
       try {
-        // 원본 영상이 보이는 경우: TTS 사용
-        // 배경 영상이 보이는 경우: 보컬 음원 사용
         if (showOriginalVideo) {
-          // 원본 영상 - TTS 모드
-          console.log('Playing phrase (TTS):', {
-            id: word.id,
-            text: word.text,
-          });
           await textToSpeech(word.text);
         } else if (audioControl) {
-          // 배경 영상 - 보컬 음원 모드
-          // Log phrase information to console
-          console.log('Playing phrase (Vocal):', {
-            id: word.id,
-            text: word.text,
-          });
-
           await audioControl.play();
         } else {
-          // 보컬 음원이 없는 경우 대체 TTS
-          console.log('Playing phrase (TTS fallback):', {
-            id: word.id,
-            text: word.text,
-          });
           await textToSpeech(word.text);
         }
       } catch (error) {
-        console.error('Audio playback failed:', error);
+        console.error("Audio playback failed:", error);
       }
 
-      // Clear highlight after audio completes
-      highlightedWordId = null;
-
-      // If last word of last verse, show celebration after audio completes
-      if (isLastVerseLastWord) {
-        playedWords = new Set();
-        showCelebration = true;
-
-        // Play applause sound
-        const applauseAudio = new Audio('https://kr.object.ncloudstorage.com/tesis/media/Applause.mp3');
-        applauseAudio.play().catch(error => {
-          console.error('Failed to play applause:', error);
-        });
-
-        setTimeout(() => {
-          onComplete();
-        }, 3000);
-      }
+      finishPlayback(isLastVerseLastWord);
     };
 
-    // For last word of last verse, wait for audio to complete
     if (isLastVerseLastWord) {
       await playAudio();
-    } else {
-      // For other words, play audio in background
-      playAudio();
-
-      // If last word of non-last verse, transition to next verse after 0.5s
-      if (isLastWord) {
-        setTimeout(() => {
-          playedWords = new Set();
-          currentVerseIndex++;
-        }, 500);
-      } else {
-        // Mark word as played (only if not last word)
-        playedWords.add(word.id);
-        playedWords = new Set(playedWords);
-      }
+      return;
     }
+
+    void playAudio();
+
+    if (isLastWord) {
+      setTimeout(() => {
+        playedWords = new Set();
+        currentVerseIndex++;
+      }, 500);
+      return;
+    }
+
+    playedWords.add(word.id);
+    playedWords = new Set(playedWords);
   }
 
   function goToPreviousVerse() {
@@ -126,15 +185,16 @@
   }
 
   function goToNextVerse() {
-    if (currentVerseIndex < song.verses.length - 1) {
+    if (loadedSong && currentVerseIndex < loadedSong.verses.length - 1) {
       playedWords = new Set();
       currentVerseIndex++;
     }
   }
 
   function getYouTubeEmbedUrl(url: string): string {
-    const videoId = url.split('youtu.be/')[1]?.split('?')[0] ||
-                    url.split('v=')[1]?.split('&')[0];
+    const videoId =
+      url.split("youtu.be/")[1]?.split("?")[0] ||
+      url.split("v=")[1]?.split("&")[0];
     return `https://www.youtube.com/embed/${videoId}?autoplay=0`;
   }
 
@@ -142,23 +202,34 @@
     showOriginalVideo = !showOriginalVideo;
   }
 
-  let currentVerse = $derived(song.verses[currentVerseIndex]);
+  let currentVerse = $derived(loadedSong?.verses[currentVerseIndex] ?? null);
+  let displayTitle = $derived(loadedSong?.title ?? song.singTitle ?? "노래");
 </script>
 
 <div class="player-container">
   <div class="header">
     <button class="btn-back" onclick={onBack}>← 목록으로</button>
-    <h1>{song.title}</h1>
-    {#if song.bgMusicVideoUrl}
+    <h1>{displayTitle}</h1>
+    {#if loadedSong?.bgMusicVideoUrl}
       <button class="btn-youtube" onclick={toggleVideo}>
-        <span class="youtube-icon">▶</span> {showOriginalVideo ? '반주 보기' : '원본 보기'}
+        <span class="youtube-icon">▶</span> {showOriginalVideo
+          ? "반주 보기"
+          : "원본 보기"}
       </button>
     {:else}
       <div class="btn-placeholder"></div>
     {/if}
   </div>
 
-  {#if showCelebration}
+  {#if songLoading}
+    <div class="status-card">
+      <p>노래 정보를 불러오는 중입니다.</p>
+    </div>
+  {:else if songError}
+    <div class="status-card error-message">
+      <p>{songError}</p>
+    </div>
+  {:else if showCelebration}
     <div class="celebration">
       <div class="celebration-content">
         <div class="applause">👏 👏 👏</div>
@@ -166,19 +237,19 @@
         <p>정말 잘했어요! 🎉</p>
       </div>
     </div>
-  {:else}
+  {:else if loadedSong}
     <div class="video-container">
-      {#if showOriginalVideo && song.originalVideoUrl}
+      {#if showOriginalVideo && loadedSong.originalVideoUrl}
         <iframe
-          src={getYouTubeEmbedUrl(song.originalVideoUrl)}
+          src={getYouTubeEmbedUrl(loadedSong.originalVideoUrl)}
           title="원본 영상"
           frameborder="0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowfullscreen
         ></iframe>
-      {:else if song.bgMusicVideoUrl}
+      {:else if loadedSong.bgMusicVideoUrl}
         <iframe
-          src={getYouTubeEmbedUrl(song.bgMusicVideoUrl)}
+          src={getYouTubeEmbedUrl(loadedSong.bgMusicVideoUrl)}
           title="배경음악"
           frameborder="0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -212,7 +283,10 @@
 
         <div class="verse-info">
           <div class="progress-bar-container">
-            <div class="progress-bar" style="width: {((currentVerseIndex + 1) / song.verses.length) * 100}%"></div>
+            <div
+              class="progress-bar"
+              style="width: {((currentVerseIndex + 1) / loadedSong.verses.length) * 100}%"
+            ></div>
           </div>
         </div>
 
@@ -235,11 +309,15 @@
           <button
             class="btn-nav"
             onclick={goToNextVerse}
-            disabled={currentVerseIndex === song.verses.length - 1}
+            disabled={currentVerseIndex === loadedSong.verses.length - 1}
           >
             다음 소절 →
           </button>
         </div>
+      </div>
+    {:else}
+      <div class="status-card">
+        <p>표시할 가사가 없습니다.</p>
       </div>
     {/if}
   {/if}
@@ -310,6 +388,24 @@
     font-size: 20px;
   }
 
+  .status-card {
+    padding: 24px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+  }
+
+  .status-card p {
+    margin: 0;
+    color: #4b5563;
+    font-size: 18px;
+  }
+
+  .error-message p {
+    color: #b91c1c;
+  }
+
   .video-container {
     margin: 0 auto 30px;
     width: 80%;
@@ -356,14 +452,14 @@
 
   .progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, #4CAF50, #8BC34A);
+    background: linear-gradient(90deg, #4caf50, #8bc34a);
     transition: width 0.3s ease;
     border-radius: 15px;
     position: relative;
   }
 
   .progress-bar::after {
-    content: '';
+    content: "";
     position: absolute;
     top: 0;
     left: 0;
@@ -399,7 +495,7 @@
     font-size: 16px;
     font-weight: bold;
     color: white;
-    background: #2196F3;
+    background: #2196f3;
     border: none;
     border-radius: 8px;
     cursor: pointer;
@@ -408,7 +504,7 @@
   }
 
   .btn-nav:hover:not(:disabled) {
-    background: #1976D2;
+    background: #1976d2;
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
   }
@@ -425,7 +521,7 @@
     font-weight: bold;
     color: #333;
     background: white;
-    border: 2px solid #2196F3;
+    border: 2px solid #2196f3;
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s;
@@ -434,12 +530,12 @@
 
   .playback-rate-select:hover {
     background: #f5f5f5;
-    border-color: #1976D2;
+    border-color: #1976d2;
   }
 
   .playback-rate-select:focus {
     outline: none;
-    border-color: #1976D2;
+    border-color: #1976d2;
     box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
   }
 
@@ -489,8 +585,8 @@
   }
 
   .word-button.highlighted {
-    border-color: #FFD700;
-    background: #FFF9C4;
+    border-color: #ffd700;
+    background: #fff9c4;
     transform: scale(1.1);
     box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
   }
@@ -536,7 +632,7 @@
 
   .celebration-content h2 {
     font-size: 48px;
-    color: #4CAF50;
+    color: #4caf50;
     margin: 0 0 20px 0;
   }
 
@@ -547,14 +643,26 @@
   }
 
   @keyframes bounce {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.1);
+    }
   }
 
   @keyframes shake {
-    0%, 100% { transform: rotate(0deg); }
-    25% { transform: rotate(-10deg); }
-    75% { transform: rotate(10deg); }
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-10deg);
+    }
+    75% {
+      transform: rotate(10deg);
+    }
   }
 
   @media (max-width: 768px) {

@@ -1,4 +1,18 @@
-import type { Song } from '../types';
+type LegacyStoredSong = {
+  id: string;
+  title: string;
+  originalVideoUrl: string;
+  bgMusicVideoUrl: string | null;
+  vocalAudioFile?: File | string;
+  verses: Array<{
+    id: string;
+    words: Array<{
+      id: string;
+      text: string;
+      imageUrl: string;
+    }>;
+  }>;
+};
 
 /**
  * 프로그램에 기본으로 포함될 노래 데이터
@@ -31,7 +45,7 @@ import type { Song } from '../types';
  * }
  */
 
-export const seedSongs: Song[] = [
+export const seedSongs: LegacyStoredSong[] = [
   {
     id: 'seed-bangawoyo',
     title: '반가워요',

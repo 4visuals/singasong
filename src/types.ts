@@ -9,13 +9,39 @@ export interface Verse {
   words: Word[];
 }
 
+export interface PicSource {
+  wordSeq: number;
+  wordName: string;
+  type: string | null;
+  genName: string;
+  picSeq: number;
+  picName: string;
+  origin: string | null;
+  fingerprint: string | null;
+  orderNum: number;
+  pumsa: string | null;
+}
+
 export interface Song {
-  id: string;
-  title: string;
-  originalVideoUrl: string;
-  bgMusicVideoUrl: string | null;
-  vocalAudioFile?: File | string;
-  verses: Verse[];
+  singSeq: number | null;
+  singTitle: string | null;
+  numOfCols: number | null;
+  singSkipLines: number | null;
+  singUrl: string | null;
+  singOrigin: string | null;
+  singCreated: Date | string | number | null;
+  singOwnerRef: number | null;
+  teacherRef: number | null;
+  bookRef: number | null;
+  thumbnail: PicSource | null;
+}
+
+export interface LoginSession {
+  oauthProfile: unknown | null;
+  student?: boolean;
+  success: boolean;
+  roles: string[];
+  userName: string;
 }
 
 export interface LegacyThumbCategory {
@@ -101,18 +127,8 @@ export interface ReadingToken {
   auxVal: string;
 }
 
-export interface ReadingPicture {
-  wordSeq: number;
-  wordName: string;
-  picSeq: number;
-  picName: string;
-  type: string | null;
-  genName: string;
+export interface ReadingPicture extends PicSource {
   fileLength?: number;
-  origin: string | null;
-  orderNum: number;
-  pumsa: string | null;
-  fingerprint: string | null;
 }
 
 export interface ReadingSymbol {
