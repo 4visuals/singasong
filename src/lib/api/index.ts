@@ -269,7 +269,7 @@ export class RestApi {
         singUrl: song.singUrl?.trim() || null,
         singOrigin: song.singOrigin,
         bookRef: song.bookRef,
-        thumbnail: song.thumbnail,
+        thumbnailRef: song.thumbnail?.picSeq ?? null,
       }),
     });
 

@@ -185,7 +185,11 @@
   </div>
 
   <div class="form-section">
-    <h2>기본 정보</h2>
+    <h2>
+      <span class="song-title">{song?.singTitle}</span><span class="seq"
+        >#{song?.bookRef}</span
+      >
+    </h2>
     <div class="form-group">
       <label for="song-title">노래 제목</label>
       <input
@@ -260,18 +264,6 @@
         </div>
       {/if}
     </div>
-
-    {#if formData.bookRef !== null}
-      <div class="form-group">
-        <label for="book-ref">연결된 읽기책</label>
-        <input
-          id="book-ref"
-          type="text"
-          value={`책 #${formData.bookRef}`}
-          disabled
-        />
-      </div>
-    {/if}
   </div>
 </div>
 
@@ -301,8 +293,16 @@
 
   h2 {
     margin: 0 0 20px 0;
-    font-size: 24px;
+    font-size: 1.8rem;
     color: #333;
+  }
+  h2 .seq {
+    color: #666;
+    font-weight: 400;
+    font-size: 1.4rem;
+    background-color: #efefef;
+    padding: 2px 8px;
+    border-radius: 4px;
   }
 
   .header-actions {
@@ -352,6 +352,7 @@
 
   .form-group {
     margin-bottom: 20px;
+    text-align: left;
   }
 
   .form-group label {
@@ -359,6 +360,7 @@
     margin-bottom: 8px;
     font-weight: bold;
     color: #555;
+    text-align: left;
   }
 
   .section-label {

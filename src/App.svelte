@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import BookTreeView from "./components/BookTreeView.svelte";
+  import DevLoginView from "./components/DevLoginView.svelte";
   import Modal from "./components/modal/Modal.svelte";
   import SongList from "./components/SongList.svelte";
   import SongPlayer from "./components/SongPlayer.svelte";
@@ -22,9 +23,6 @@
   let currentScreen = $state<Screen>("list");
   let selectedSong = $state<Song | null>(null);
   let editingSong = $state<Song | null>(null);
-  let showDevLoginForm = $state(false);
-  let devLoginUserId = $state("");
-  let devLoginPassword = $state("");
   let loginPending = $state(false);
   let loginMessage = $state("");
   let loginSession = $state<LoginSession | null>(null);
@@ -136,20 +134,13 @@
     }, 3000);
   }
 
-  function toggleDevLoginForm() {
-    showDevLoginForm = !showDevLoginForm;
-    loginMessage = "";
-
-    if (!showDevLoginForm) {
-      devLoginUserId = "";
-      devLoginPassword = "";
-    }
-  }
-
-  async function handleDevLogin() {
-    if (!devLoginUserId.trim() || !devLoginPassword.trim()) {
+  async function handleDevLogin(
+    userId: string,
+    password: string,
+  ): Promise<boolean> {
+    if (!userId.trim() || !password.trim()) {
       loginMessage = "아이디와 비밀번호를 입력하세요.";
-      return;
+      return false;
     }
 
     loginPending = true;
@@ -157,18 +148,19 @@
 
     try {
       const response = await restApi.login({
-        userID: devLoginUserId.trim(),
-        userPassword: devLoginPassword,
+        userID: userId.trim(),
+        userPassword: password,
       });
 
       loginSession = response;
       saveLoginSession(response);
 
       loginMessage = "개발용 로그인에 성공했습니다.";
-      showDevLoginForm = false;
+      return true;
     } catch (error) {
       loginMessage =
         error instanceof Error ? error.message : "로그인 요청에 실패했습니다.";
+      return false;
     } finally {
       loginPending = false;
     }
@@ -211,63 +203,12 @@
 
 <main>
   {#if isDev}
-    <div class="dev-login-panel">
-      <div class="dev-login-controls">
-        <button
-          class="dev-login-button"
-          onclick={toggleDevLoginForm}
-          disabled={loginPending}
-          type="button"
-        >
-          {showDevLoginForm ? "로그인 폼 닫기" : "개발용 로그인"}
-        </button>
-
-        {#if showDevLoginForm}
-          <form
-            class="dev-login-form"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void handleDevLogin();
-            }}
-          >
-            <input
-              class="dev-login-input"
-              type="text"
-              bind:value={devLoginUserId}
-              placeholder="아이디"
-              autocomplete="username"
-              disabled={loginPending}
-            />
-            <input
-              class="dev-login-input"
-              type="password"
-              bind:value={devLoginPassword}
-              placeholder="비밀번호"
-              autocomplete="current-password"
-              disabled={loginPending}
-            />
-            <button
-              class="dev-login-submit"
-              type="submit"
-              disabled={loginPending}
-            >
-              {loginPending ? "로그인 중..." : "로그인"}
-            </button>
-          </form>
-        {/if}
-      </div>
-
-      {#if loginMessage}
-        <p class="dev-login-message">{loginMessage}</p>
-      {/if}
-
-      {#if selectedReadingBook}
-        <p class="dev-login-message">
-          선택된 책: {selectedReadingBook.detail.bookName}
-          ({selectedReadingBook.detail.paras.length}개 문단)
-        </p>
-      {/if}
-    </div>
+    <DevLoginView
+      {loginPending}
+      {loginMessage}
+      {selectedReadingBook}
+      onLogin={handleDevLogin}
+    />
   {/if}
 
   {#if currentScreen === "list"}
@@ -314,80 +255,6 @@
     min-height: 100vh;
     padding: 20px;
     box-sizing: border-box;
-  }
-
-  .dev-login-panel {
-    display: flex;
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 12px;
-    margin-bottom: 16px;
-    padding: 12px 16px;
-    border-radius: 12px;
-    background: #ffffff;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  }
-
-  .dev-login-controls {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    width: 100%;
-  }
-
-  .dev-login-button {
-    border: 0;
-    border-radius: 8px;
-    padding: 10px 14px;
-    font: inherit;
-    font-weight: 600;
-    color: #ffffff;
-    background: #1f6feb;
-    cursor: pointer;
-  }
-
-  .dev-login-form {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    width: 100%;
-  }
-
-  .dev-login-input {
-    flex: 1 1 180px;
-    min-width: 0;
-    padding: 10px 12px;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    font: inherit;
-  }
-
-  .dev-login-submit {
-    border: 0;
-    border-radius: 8px;
-    padding: 10px 14px;
-    font: inherit;
-    font-weight: 600;
-    color: #ffffff;
-    background: #16a34a;
-    cursor: pointer;
-  }
-
-  .dev-login-button:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-
-  .dev-login-submit:disabled,
-  .dev-login-input:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-
-  .dev-login-message {
-    margin: 0;
-    color: #333333;
-    font-size: 14px;
   }
 
   :global(*) {

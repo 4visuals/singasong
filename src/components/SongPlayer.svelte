@@ -75,7 +75,10 @@
 
     audioControl = null;
 
-    if (!activeSong?.vocalAudioFile || typeof activeSong.vocalAudioFile !== "string") {
+    if (
+      !activeSong?.vocalAudioFile ||
+      typeof activeSong.vocalAudioFile !== "string"
+    ) {
       return;
     }
 
@@ -204,6 +207,7 @@
 
   let currentVerse = $derived(loadedSong?.verses[currentVerseIndex] ?? null);
   let displayTitle = $derived(loadedSong?.title ?? song.singTitle ?? "노래");
+  let wordGridColumnCount = $derived(Math.max(song.numOfCols ?? 3, 1));
 </script>
 
 <div class="player-container">
@@ -212,9 +216,8 @@
     <h1>{displayTitle}</h1>
     {#if loadedSong?.bgMusicVideoUrl}
       <button class="btn-youtube" onclick={toggleVideo}>
-        <span class="youtube-icon">▶</span> {showOriginalVideo
-          ? "반주 보기"
-          : "원본 보기"}
+        <span class="youtube-icon">▶</span>
+        {showOriginalVideo ? "반주 보기" : "원본 보기"}
       </button>
     {:else}
       <div class="btn-placeholder"></div>
@@ -266,7 +269,10 @@
 
     {#if currentVerse}
       <div class="lyrics-container">
-        <div class="words-grid">
+        <div
+          class="words-grid"
+          style={`--word-grid-columns: ${wordGridColumnCount};`}
+        >
           {#each currentVerse.words as word (word.id)}
             <button
               class="word-button"
@@ -285,7 +291,9 @@
           <div class="progress-bar-container">
             <div
               class="progress-bar"
-              style="width: {((currentVerseIndex + 1) / loadedSong.verses.length) * 100}%"
+              style="width: {((currentVerseIndex + 1) /
+                loadedSong.verses.length) *
+                100}%"
             ></div>
           </div>
         </div>
@@ -299,7 +307,11 @@
             ← 이전 소절
           </button>
 
-          <select class="playback-rate-select" bind:value={playbackRate} disabled>
+          <select
+            class="playback-rate-select"
+            bind:value={playbackRate}
+            disabled
+          >
             <option value={0.5}>0.5배속</option>
             <option value={0.75}>0.75배속</option>
             <option value={0.85}>0.85배속</option>
@@ -541,7 +553,7 @@
 
   .words-grid {
     display: grid;
-    grid-template-columns: repeat(3, 180px);
+    grid-template-columns: repeat(var(--word-grid-columns, 3), 180px);
     gap: 20px;
     justify-content: center;
     margin-bottom: 30px;
